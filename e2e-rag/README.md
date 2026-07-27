@@ -18,6 +18,7 @@ End-to-end retrieval-augmented generation benchmark for multi-hop question answe
 - [Typical Workflow](#typical-workflow)
 - [Step 1: Download Models and Data](#step-1-download-models-and-data-one-time)
 - [Step 2: Build Vector Database](#step-2-build-vector-database-one-time-measured-operation)
+- [Verify Vector Database](#verify-vector-database)
 - [Step 3: Run Question-Answering Workload](#step-3-run-question-answering-workload)
 - [Common Configuration](#common-configuration)
 - [Prerequisites](#prerequisites)
@@ -77,6 +78,34 @@ bash reference_mlperf_datasetup_accuracy.sh
 ```
 
 **Output:** Creates `${DATABASE}.db` and `${DATABASE}_data/` directory.
+
+### Verify Vector Database
+
+An independently-built vector DB is accepted as equivalent to a reference DB
+when it uses the same embedding model, corpus, chunking/parsing, and index
+configuration — it need not be byte-identical (passage order and exact
+embedding values may differ). Verification checks passage count, embedding
+dimension, FAISS index parameters, an order-independent corpus fingerprint, and
+top-K retrieval overlap against reference queries within a tolerance.
+
+The taskforce provides the reference manifest; submitters verify their own DB
+against it.
+
+**Verify a DB against the manifest:**
+```bash
+INFERENCE_DB=vector_html_hnsw_len768_ov32_word \
+bash scripts/verify_db_manifest_v2.sh db_manifest.json.gz
+```
+
+Exit code `0` = equivalent, `1` = not. The optional second argument to the
+verify script overrides the retrieval-overlap threshold (default `0.90`,
+provisional).
+
+**Write a reference manifest** (taskforce only; small `.json.gz`, no embeddings inside):
+```bash
+INFERENCE_DB=vector_html_hnsw_len768_ov32_word \
+bash scripts/write_db_manifest_v2.sh db_manifest.json.gz
+```
 
 ### Step 3: Run question-answering workload
 
