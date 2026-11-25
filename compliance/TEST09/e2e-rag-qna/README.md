@@ -4,128 +4,59 @@
 
 TEST09 verifies that the output token length during performance runs matches expected values to prevent output truncation cheating.
 
-## Statistics from Reference Implementation
+## Thresholds
 
-Based on 5 production runs (4021 total answer_generator invocations):
+From `audit.config`: the reference mean output length of the final
+`answer_generator` call is 273.81 tokens (`usage.completion_tokens` over the
+reference `logs_result.json`, n=810), with a ±10% bound:
 
-| Run | Samples | Avg OSL |
-|-----|---------|---------|
-| 1   | 794     | 221     |
-| 2   | 805     | 258     |
-| 3   | 810     | 273     |
-| 4   | 813     | 211     |
-| 5   | 799     | 214     |
-
-**Weighted Mean OSL:** 235.47 tokens
-
-**TEST09 Thresholds (±10%):**
-- Min output tokens: 211.92
-- Max output tokens: 259.02
+- Min output tokens: 246.43
+- Max output tokens: 301.19
 
 ## Usage
 
-### Automated Workflow (Recommended)
+Run from `e2e-rag/` in the inference repository. Settings come from
+`config.default.sh` (override in `config.sh` or with exported variables).
 
-Use the automated compliance test script that handles setup, run, verification, and cleanup:
+### Automated workflow (recommended)
 
 ```bash
-cd inference/e2e
-
-# Run TEST09 only
-bash run_compliance_test09.sh
-
-# Or run all compliance tests
-bash run_all_compliance_tests.sh
+bash scripts/run_compliance_test09.sh
 ```
 
-The script will:
-1. ✓ Copy audit.config to working directory
-2. ✓ Run performance test with LoadGen compliance logging
-3. ✓ Verify output token length thresholds
-4. ✓ Copy results to submission directory
-5. ✓ Clean up audit.config automatically
+The script copies `audit.config`, runs the performance test with the perf cache
+(`PERF_CACHE_FILE`, default `logs_result.json`; the run stops if it is
+missing), runs `run_verification.py`, copies the results to the submission
+directory and removes the copied `audit.config`.
 
-**Environment Variables (optional):**
+### Manual workflow
 
 ```bash
-# Override defaults
-export DATABASE=vector_html_hnsw_len768_ov32_word.db
-export MAX_ASYNC_QUERIES=10
-export MAX_WORKERS=10
-export PERF_CACHE_FILE=logs_result.json  # Use cached LLM responses
-
-bash run_compliance_test09.sh
-```
-
-### Manual Workflow
-
-### Part I: Setup
-
-Copy the audit.config to your working directory:
-
-```bash
-cd inference/e2e-rag
 cp ../compliance/TEST09/e2e-rag-qna/audit.config ./
-```
-
-### Part II: Run Performance Test
-
-Run the benchmark as normal. LoadGen will automatically detect `audit.config`:
-
-```bash
-bash reference_mlperf_perf.sh
-```
-
-Or directly:
-
-```bash
-python3 reference_mlperf.py \
-    --dataset_path data/frames_dataset.tsv \
+python3 main_qna.py \
+    --dataset_path frames-benchmark-dataset/frames_dataset.tsv \
     --database vector_html_hnsw_len768_ov32_word.db \
     --scenario Offline \
+    --audit_conf audit.config \
     --log_dir run_output_test09 \
-    --perf_count 824
-```
+    --perf-test-mode logs_result.json
+rm audit.config   # avoid running in compliance mode by accident
 
-**Important:** Remove `audit.config` after the test to avoid running in compliance mode unintentionally.
-
-### Part III: Run Verification
-
-```bash
-python3 inference/e2e/third_party/mlperf-inference/compliance/TEST09/run_verification.py \
+python3 ../compliance/TEST09/run_verification.py \
     -c run_output_test09 \
     -o submission/compliance/e2e-rag-qna/Offline \
     --audit-config ../compliance/TEST09/e2e-rag-qna/audit.config
 ```
 
-### Expected Output
+### Expected result
 
-```
-================================================================================
-TEST09: Verify Output Token Length in Performance Mode
-================================================================================
-Output Token Length Statistics
-================================================================================
-Total samples: 824
-Mean output tokens: 235.47
-Min output tokens: 1
-Max output tokens: 2829
-Std deviation: ~150
-
-================================================================================
-Verification Results
-================================================================================
-Mean output tokens: 235.47
-Min threshold: 211.92 -> PASS
-Max threshold: 259.02 -> PASS
-
-Overall: TEST PASS
-```
+`run_verification.py` reports the mean output tokens of the 824 samples and
+`Overall: TEST PASS` when it is between 246.43 and 301.19.
 
 ## Notes
 
 - **Component Measured:** `answer_generator` - this is the only component that LoadGen logs (the final answer generation step)
-- **Dataset:** Full 824 queries from frames_dataset.tsv
+- **Dataset:** all 824 questions of `frames_dataset.tsv`, each issued once (`performance_issue_unique = 1`)
 - **Workload:** Multi-hop RAG with iterative retrieval (max 5 iterations)
 - The thresholds are based on the answer_generator component only, not the intermediate multi-shot retrieval steps
 - Other components (check_sufficiency, generate_search_queries, evaluate_document_relevance) are internal to the SUT and not measured by TEST09
